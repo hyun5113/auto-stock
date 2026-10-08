@@ -399,7 +399,7 @@
       msg.classList.add('hidden');
 
       try {
-        const response = await fetch('${API_BASE_URL}/api/sync-toss');
+        const response = await fetch('${API_BASE_URL}/api/sync-toss',{method: 'GET', headers: { 'Accept': application/json'}});
         const result = await response.json();
 
         if (result.success && result.data) {
