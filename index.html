@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AssetPulse Pro Terminal - 통합 자산 관리</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: { fontFamily: { mono: ['JetBrains Mono', 'monospace'], sans: ['Noto Sans KR', 'sans-serif'] } }
+      }
+    };
+  </script>
+
+  <style>
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.4); border-radius: 9999px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+
+    .touch-pop:active { transform: scale(0.97); transition: transform 0.05s; }
+
+    /* 테마 변수 설정 */
+    body.theme-dark {
+      --bg-main: #0b0f17; --card-bg: #111827; --card-border: #1f293d; --card-header-bg: #162032;
+      --sub-card-bg: #0d131f; --input-bg: #090d16; --text-primary: #f8fafc; --text-secondary: #94a3b8;
+      --text-muted: #64748b; --accent: #10b981; --card-shadow: 0 4px 20px -2px rgba(0,0,0,0.5);
+    }
+    body.theme-light {
+      --bg-main: #eef2f6; --card-bg: #ffffff; --card-border: #cbd5e1; --card-header-bg: #f8fafc;
+      --sub-card-bg: #f1f5f9; --input-bg: #ffffff; --text-primary: #0f172a; --text-secondary: #334155;
+      --text-muted: #64748b; --accent: #2563eb; --card-shadow: 0 4px 12px -2px rgba(30,41,59,0.08);
+    }
+
+    .pro-card {
+      background: var(--card-bg); border: 1px solid var(--card-border);
+      border-radius: 0.5rem; box-shadow: var(--card-shadow);
+    }
+    
+    #newsSidePanel { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+  </style>
+</head>
+<body class="theme-dark text-[var(--text-primary)] min-h-screen bg-[var(--bg-main)] font-sans transition-colors duration-200">
+
+  <!-- TOP NAV -->
+  <aside class="sticky top-0 z-40 bg-[var(--card-bg)]/95 backdrop-blur-md border-b border-[var(--card-border)] px-4 py-2">
+    <div class="max-w-6xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-7 h-7 rounded bg-emerald-500 text-slate-950 flex items-center justify-center font-black text-xs">AP</div>
+        <div class="font-black tracking-tight text-sm flex items-center gap-2">
+          ASSETPULSE PRO
+          <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold">LIVE 터미널</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="switchTerminalTheme()" class="p-1.5 rounded bg-[var(--sub-card-bg)] border border-[var(--card-border)] text-[var(--text-muted)] hover:text-emerald-400 touch-pop transition" title="테마 변경">
+          <i data-lucide="moon" class="w-4 h-4" id="themeIcon"></i>
+        </button>
+        <!-- API 연동 모달 오픈 버튼 -->
+        <button onclick="openUserSettingsModal()" class="px-3 py-1.5 rounded bg-[var(--card-bg)] border border-[var(--card-border)] text-[11px] font-bold hover:border-emerald-500 touch-pop flex items-center gap-1.5 transition">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-emerald-400" id="topSyncIcon"></i> 토스 API 동기화
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTAINER -->
+  <div class="max-w-6xl mx-auto p-4 space-y-4 relative z-10 pb-20">
+
+    <!-- HERO CARD: TOTAL ASSETS -->
+    <div class="pro-card p-5 flex flex-col md:flex-row justify-between items-center md:items-end gap-4">
+      <div>
+        <div class="flex items-center gap-2 text-xs font-bold text-emerald-400 mb-1">
+          <span class="relative flex h-2 w-2"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
+          LIVE VALUATION
+          <span class="text-[var(--text-muted)] font-normal ml-1" id="lastSyncTime">현재 동기화 대기중...</span>
+        </div>
+        <div class="text-[11px] font-bold text-[var(--text-muted)]">통합 실시간 총자산 (KRW + USD 환산)</div>
+        <div class="text-4xl font-black tracking-tight font-mono mt-1" id="totalKrwHero">₩ 0</div>
+      </div>
+      <div class="text-right">
+        <div class="text-[11px] font-bold text-[var(--text-secondary)] bg-[var(--sub-card-bg)] px-2 py-1 rounded border border-[var(--card-border)] inline-block mb-1">
+          기준 환율: <span class="text-emerald-400" id="headerFxRate">1,384.50</span>원
+        </div>
+        <div class="text-sm text-[var(--text-muted)] font-bold font-mono" id="totalUsdHero">≈ $ 0.00 USD</div>
+      </div>
+    </div>
+
+    <!-- MAIN TABS -->
+    <div class="flex space-x-1 border-b border-[var(--card-border)] pb-2 text-sm font-bold">
+      <button onclick="switchTab('main')" id="tabBtn-main" class="px-4 py-2 text-emerald-400 border-b-2 border-emerald-400 flex items-center gap-1.5 transition">
+        <i data-lucide="layout-grid" class="w-4 h-4"></i> 메인 포트폴리오
+      </button>
+      <button onclick="switchTab('analysis')" id="tabBtn-analysis" class="px-4 py-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] border-b-2 border-transparent flex items-center gap-1.5 transition">
+        <i data-lucide="bar-chart-2" class="w-4 h-4"></i> 심층 분석 뷰
+      </button>
+      <button onclick="switchTab('history')" id="tabBtn-history" class="px-4 py-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] border-b-2 border-transparent flex items-center gap-1.5 transition">
+        <i data-lucide="trending-up" class="w-4 h-4"></i> 자산 추이 기록
+      </button>
+    </div>
+
+    <!-- TAB 1: MAIN PORTFOLIO -->
+    <main id="view-main" class="space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <!-- Table -->
+        <div class="lg:col-span-2 pro-card overflow-hidden flex flex-col h-[400px]">
+          <div class="bg-[var(--card-header-bg)] px-4 py-2 border-b border-[var(--card-border)] flex items-center justify-between text-xs font-bold">
+            <span class="flex items-center gap-1.5 text-[var(--text-primary)]"><i data-lucide="list" class="w-3.5 h-3.5 text-emerald-400"></i> 고밀도 보유 종목 테이블</span>
+            <span class="text-[10px] text-[var(--text-muted)]">행을 클릭하면 우측 분석 패널이 열립니다</span>
+          </div>
+          <div class="flex-1 overflow-auto">
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="sticky top-0 bg-[var(--card-header-bg)] text-[var(--text-muted)] text-[10px] uppercase border-b border-[var(--card-border)] shadow-sm z-10">
+                <tr>
+                  <th class="px-3 py-2">종목명 (티커)</th>
+                  <th class="px-3 py-2 text-right">보유수량</th>
+                  <th class="px-3 py-2 text-right">현재가</th>
+                  <th class="px-3 py-2 text-right">평가금액 (KRW)</th>
+                  <th class="px-3 py-2 text-right">평가손익</th>
+                </tr>
+              </thead>
+              <tbody id="holdingsTableBody" class="divide-y divide-[var(--card-border)] font-mono">
+                <!-- Rendered by JS -->
+                <tr><td colspan="5" class="text-center py-10 text-[var(--text-muted)]">우측 상단의 '토스 API 동기화'를 눌러주세요.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Donut Chart -->
+        <div class="pro-card p-4 flex flex-col h-[400px]">
+          <div class="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5 mb-4 shrink-0">
+            <i data-lucide="pie-chart" class="w-3.5 h-3.5 text-emerald-400"></i> 자산 배분 비중
+          </div>
+          <div class="flex-1 flex flex-col md:flex-row items-center gap-4 overflow-hidden">
+            <div class="relative w-48 h-48 shrink-0 flex items-center justify-center">
+              <canvas id="donutChart" class="w-full h-full relative z-10"></canvas>
+              <!-- 차트 캔버스 중앙에 글자 배치 -->
+              <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-0">
+                <span class="text-[10px] text-[var(--text-muted)] font-sans mt-2">총 자산 규모</span>
+                <span class="text-lg font-black text-emerald-400 drop-shadow-md" id="donutTotalText">₩ 0</span>
+              </div>
+            </div>
+            <!-- 스크롤 가능한 범례 영역 -->
+            <div id="donutLegendContainer" class="flex-1 w-full overflow-y-auto space-y-1 h-full pr-1">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- TAB 2: ANALYSIS VIEW -->
+    <main id="view-analysis" class="space-y-4 hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Heatmap -->
+        <div class="pro-card p-4 h-[350px] flex flex-col">
+          <div class="flex items-center justify-between mb-3 shrink-0">
+            <div class="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+              <i data-lucide="grid" class="w-3.5 h-3.5 text-emerald-400"></i> 일간 손익 히트맵
+            </div>
+            <div class="text-[9px] text-[var(--text-muted)] bg-[var(--sub-card-bg)] px-2 py-1 rounded border border-[var(--card-border)]">상자 크기: 당일 손익 기여도(절댓값)</div>
+          </div>
+          <!-- 히트맵 캔버스 -->
+          <div id="heatmapContainer" class="flex-1 w-full relative font-mono text-[10px] overflow-hidden rounded-md bg-[var(--bg-main)] border border-[var(--card-border)]">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <!-- Daily Contribution Bar Chart -->
+        <div class="pro-card p-4 h-[350px] flex flex-col">
+          <div class="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5 mb-1">
+            <i data-lucide="bar-chart" class="w-3.5 h-3.5 text-emerald-400"></i> 종목별 일간 손익 (원화 기준)
+          </div>
+          <div class="text-[10px] text-[var(--text-muted)] mb-3">전일 대비 계좌 평가금액 상승/하락 기여 금액</div>
+          <div class="flex-1 relative w-full h-full">
+            <canvas id="barChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- TAB 3: HISTORY VIEW (과거 상세 기록) -->
+    <main id="view-history" class="space-y-4 hidden">
+      
+      <!-- 상단 컨트롤 패널 (새로 추가된 기능들) -->
+      <div class="pro-card p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <!-- 일/월/연 토글 버튼 -->
+        <div class="flex bg-[var(--sub-card-bg)] p-1 rounded-lg border border-[var(--card-border)] text-xs font-bold">
+          <button onclick="setHistoryPeriod('daily')" id="btn-period-daily" class="px-4 py-1.5 rounded bg-[var(--card-bg)] text-emerald-400 shadow-sm transition touch-pop">일간</button>
+          <button onclick="setHistoryPeriod('monthly')" id="btn-period-monthly" class="px-4 py-1.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] transition touch-pop">월간</button>
+          <button onclick="setHistoryPeriod('yearly')" id="btn-period-yearly" class="px-4 py-1.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] transition touch-pop">연간</button>
+        </div>
+
+        <!-- 사용자 날짜 지정 필터 -->
+        <div class="flex items-center gap-2 text-xs">
+          <span class="text-[var(--text-muted)] font-bold"><i data-lucide="calendar" class="w-3.5 h-3.5 inline-block mb-0.5"></i> 조회 기간:</span>
+          <input type="date" id="historyStartDate" class="bg-[var(--input-bg)] border border-[var(--card-border)] rounded px-2 py-1.5 text-[var(--text-primary)] text-xs focus:outline-none focus:border-emerald-500" onchange="applyDateFilter()">
+          <span class="text-[var(--text-muted)]">~</span>
+          <input type="date" id="historyEndDate" class="bg-[var(--input-bg)] border border-[var(--card-border)] rounded px-2 py-1.5 text-[var(--text-primary)] text-xs focus:outline-none focus:border-emerald-500" onchange="applyDateFilter()">
+        </div>
+      </div>
+
+      <!-- 차트 렌더링 영역 -->
+      <div class="pro-card p-4 h-[400px] flex flex-col">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
+          <div class="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+            <i data-lucide="trending-up" class="w-3.5 h-3.5 text-emerald-400"></i> 과거 자산 추이 그래프
+          </div>
+          <div class="flex items-center gap-2">
+            <!-- 오늘 기록 저장 버튼 -->
+            <button onclick="saveCurrentRecord()" class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold transition flex items-center gap-1.5 shadow-sm touch-pop">
+              <i data-lucide="save" class="w-3 h-3"></i> 오늘 스냅샷 기록
+            </button>
+            <button onclick="loadHistoryData()" class="px-3 py-1.5 rounded bg-[var(--sub-card-bg)] border border-[var(--card-border)] text-[10px] hover:border-emerald-500 hover:text-emerald-400 transition flex items-center gap-1.5 shadow-sm touch-pop">
+              <i data-lucide="refresh-cw" class="w-3 h-3"></i> 데이터 새로고침
+            </button>
+          </div>
+        </div>
+        <div class="flex-1 relative w-full h-full">
+          <canvas id="historyChart"></canvas>
+        </div>
+      </div>
+    </main>
+
+  </div>
+
+  <!-- MODAL: 토스 API 동기화 -->
+  <div id="userSettingsModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[var(--card-bg)] border border-[var(--card-border)] w-full max-w-sm rounded-lg p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-[var(--card-border)] pb-3">
+        <h3 class="font-bold text-emerald-400 flex items-center gap-2"><i data-lucide="cloud-download" class="w-4 h-4"></i> 실시간 잔고 연동</h3>
+        <button onclick="closeUserSettingsModal()" class="text-[var(--text-muted)] hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      <div class="text-xs text-[var(--text-secondary)]">
+        백엔드 서버와 통신하여 내 토스증권 계좌의 최신 잔고를 불러옵니다.
+      </div>
+      <button type="button" onclick="testTossApiConnection()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded touch-pop text-xs transition flex items-center justify-center gap-2">
+        <i data-lucide="refresh-cw" class="w-4 h-4" id="apiTestSpinner"></i>
+        <span>서버에서 토스 데이터 불러오기</span>
+      </button>
+      <div id="apiTestMsg" class="text-[11px] text-emerald-400 font-bold hidden text-center pt-2"></div>
+    </div>
+  </div>
+
+  <!-- SLIDE-OUT PANEL (News & Deep Dive) -->
+  <div id="newsSidePanel" class="fixed top-0 right-0 h-full w-80 sm:w-96 bg-[var(--card-bg)] border-l border-[var(--card-border)] shadow-2xl transform translate-x-full z-50 flex flex-col">
+    <div class="flex items-center justify-between p-4 border-b border-[var(--card-border)] bg-[var(--card-header-bg)]">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-black font-mono text-sm border border-emerald-500/30" id="panelTicker">TK</div>
+        <div>
+          <div class="font-bold text-sm text-[var(--text-primary)]" id="panelName">종목명</div>
+          <div class="text-[10px] text-[var(--text-muted)] font-mono" id="panelValue">₩ 0</div>
+        </div>
+      </div>
+      <button onclick="closeNewsPanel()" class="p-1.5 text-[var(--text-muted)] hover:text-red-400 rounded transition bg-[var(--sub-card-bg)] border border-[var(--card-border)]">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-4 space-y-4">
+      <div class="grid grid-cols-2 gap-2 text-xs">
+        <div class="bg-[var(--sub-card-bg)] p-2.5 rounded border border-[var(--card-border)]">
+          <div class="text-[10px] text-[var(--text-muted)] mb-1">현재 수익률</div>
+          <div class="font-black font-mono text-sm" id="panelReturnPct">0.00%</div>
+        </div>
+        <div class="bg-[var(--sub-card-bg)] p-2.5 rounded border border-[var(--card-border)]">
+          <div class="text-[10px] text-[var(--text-muted)] mb-1">현재가</div>
+          <div class="font-bold font-mono text-sm text-[var(--text-primary)]" id="panelPrice">$0.00</div>
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-bold text-emerald-400 flex items-center gap-1.5"><i data-lucide="sparkles" class="w-3.5 h-3.5"></i> 실시간 시황 코멘트</h3>
+        </div>
+        
+        <div id="newsLoading" class="hidden py-6 flex flex-col items-center justify-center space-y-2">
+          <i data-lucide="loader-2" class="w-6 h-6 text-emerald-400 animate-spin"></i>
+          <span class="text-[10px] text-[var(--text-muted)]">API에서 최신 기사를 분석 중입니다...</span>
+        </div>
+
+        <div id="newsContent" class="bg-[var(--sub-card-bg)] p-3 rounded-lg border border-[var(--card-border)] space-y-2 relative overflow-hidden">
+          <div class="absolute left-0 top-0 w-1 h-full bg-emerald-500"></div>
+          <div class="text-xs font-bold text-[var(--text-primary)] leading-tight" id="newsTitle">뉴스 제목</div>
+          <p class="text-[11px] text-[var(--text-secondary)] leading-relaxed" id="newsSummary">종목 요약 내용</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="panelOverlay" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 hidden" onclick="closeNewsPanel()"></div>
+
+  <!-- TOAST -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs px-4 py-2 rounded shadow-2xl flex items-center gap-2 pointer-events-none opacity-0 transition-opacity duration-300 z-50 border border-slate-700">
+    <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+    <span id="toastMsg">알림</span>
+  </div>
+
+  <script>
+    let isDarkTheme = true;
+    let donutChartInst = null;
+    let barChartInst = null;
+    let historyChartInst = null;
+    let tossHoldings = []; 
+    let liveFxRate = 1384.50; 
+    let currentTotalAssetKrw = 0; 
+    let rawHistoryData = []; 
+
+    // 필터 제어용 변수
+    let currentHistoryPeriod = 'daily'; // daily, monthly, yearly
+    let filterStartDate = null;
+    let filterEndDate = null;
+
+    // 1. 실시간 환율 조회 로직
+    async function fetchLiveFxRate() {
+      try {
+        const res = await fetch('https://open.er-api.com/v6/latest/USD');
+        const data = await res.json();
+        if(data && data.rates && data.rates.KRW) {
+          liveFxRate = data.rates.KRW;
+          document.getElementById('headerFxRate').innerText = liveFxRate.toLocaleString('ko-KR', {maximumFractionDigits: 2});
+        }
+      } catch(e) {
+        console.error('환율 연동 실패, 기본값 사용', e);
+      }
+    }
+
+    window.onload = () => {
+      if (window.lucide) lucide.createIcons();
+      fetchLiveFxRate(); 
+    };
+
+    function switchTerminalTheme() {
+      isDarkTheme = !isDarkTheme;
+      document.body.className = isDarkTheme ? 
+        "theme-dark text-[var(--text-primary)] min-h-screen bg-[var(--bg-main)] font-sans transition-colors duration-200" : 
+        "theme-light text-[var(--text-primary)] min-h-screen bg-[var(--bg-main)] font-sans transition-colors duration-200";
+      
+      const icon = document.getElementById('themeIcon');
+      icon.setAttribute('data-lucide', isDarkTheme ? 'moon' : 'sun');
+      if (window.lucide) lucide.createIcons();
+      
+      if(tossHoldings.length > 0) calculateAndRender(); 
+      showToast(isDarkTheme ? '어두운 테마 적용' : '밝은 테마 적용');
+    }
+
+    function switchTab(tabId) {
+      document.getElementById('view-main').classList.toggle('hidden', tabId !== 'main');
+      document.getElementById('view-analysis').classList.toggle('hidden', tabId !== 'analysis');
+      document.getElementById('view-history').classList.toggle('hidden', tabId !== 'history');
+      
+      const btnMain = document.getElementById('tabBtn-main');
+      const btnAnalysis = document.getElementById('tabBtn-analysis');
+      const btnHistory = document.getElementById('tabBtn-history');
+      
+      const activeClass = "px-4 py-2 text-emerald-400 border-b-2 border-emerald-400 flex items-center gap-1.5 transition";
+      const inactiveClass = "px-4 py-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] border-b-2 border-transparent flex items-center gap-1.5 transition";
+
+      btnMain.className = tabId === 'main' ? activeClass : inactiveClass;
+      btnAnalysis.className = tabId === 'analysis' ? activeClass : inactiveClass;
+      btnHistory.className = tabId === 'history' ? activeClass : inactiveClass;
+
+      if (tabId === 'history') {
+        loadHistoryData(); 
+      } else if (tabId === 'analysis') {
+        setTimeout(() => { if(tossHoldings.length > 0) calculateAndRender(); }, 50);
+      }
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMsg').innerText = msg;
+      toast.classList.remove('opacity-0');
+      toast.classList.add('opacity-100');
+      setTimeout(() => { toast.classList.remove('opacity-100'); toast.classList.add('opacity-0'); }, 2000);
+    }
+
+    function openUserSettingsModal() { document.getElementById('userSettingsModal').classList.remove('hidden'); }
+    function closeUserSettingsModal() { document.getElementById('userSettingsModal').classList.add('hidden'); }
+
+    async function testTossApiConnection() {
+      const spinner = document.getElementById('apiTestSpinner');
+      const msg = document.getElementById('apiTestMsg');
+      const topSyncIcon = document.getElementById('topSyncIcon');
+      
+      spinner.classList.add('animate-spin');
+      topSyncIcon.classList.add('animate-spin');
+      msg.classList.add('hidden');
+
+      try {
+        const response = await fetch('/api/sync-toss');
+        const result = await response.json();
+
+        if (result.success && result.data) {
+          tossHoldings = Array.isArray(result.data) ? result.data : result.data.items || [];
+          msg.classList.remove('hidden');
+          msg.className = 'text-[11px] text-emerald-400 font-bold text-center pt-2';
+          msg.innerText = `✓ 잔고 동기화 완료! (${tossHoldings.length}개 종목 확인)`;
+          
+          document.getElementById('lastSyncTime').innerText = new Date().toLocaleTimeString('ko-KR') + ' 동기화됨';
+          
+          calculateAndRender();
+          showToast('토스 잔고가 성공적으로 연동되었습니다.');
+          setTimeout(closeUserSettingsModal, 1500);
+        } else {
+          throw new Error(result.message || '데이터를 불러올 수 없습니다.');
+        }
+      } catch (error) {
+        msg.classList.remove('hidden');
+        msg.className = 'text-[11px] text-red-400 font-bold text-center pt-2';
+        msg.innerText = `✕ 연결 실패: 백엔드를 켜주세요`;
+        
+        // 에러 시 테스트용 가상 데이터 강제 주입
+        tossHoldings = [
+          { name: "SK하이닉스", symbol: "000660", currency: "KRW", quantity: "15", lastPrice: "165000", dailyProfitLoss: {amount: "450000", rate: "0.035"} },
+          { name: "엔비디아", symbol: "NVDA", currency: "USD", quantity: "50", lastPrice: "128.5", dailyProfitLoss: {amount: "15.5", rate: "0.021"} },
+          { name: "테슬라", symbol: "TSLA", currency: "USD", quantity: "30", lastPrice: "245.2", dailyProfitLoss: {amount: "-5.2", rate: "-0.015"} },
+          { name: "애플", symbol: "AAPL", currency: "USD", quantity: "25", lastPrice: "225.0", dailyProfitLoss: {amount: "2.1", rate: "0.008"} }
+        ];
+        calculateAndRender();
+        showToast('[가상 모드] 테스트 데이터가 반영되었습니다.');
+        setTimeout(closeUserSettingsModal, 1500);
+      } finally {
+        spinner.classList.remove('animate-spin');
+        topSyncIcon.classList.remove('animate-spin');
+      }
+    }
+
+    function calculateAndRender() {
+      let totalAssetKrw = 0;
+      let donutData = [];
+      let donutLabels = [];
+      let donutColors = [];
+      let barLabels = [];
+      let barData = [];
+      let heatmapData = []; 
+
+      const tableBody = document.getElementById('holdingsTableBody');
+      const heatmapContainer = document.getElementById('heatmapContainer');
+      const donutLegendContainer = document.getElementById('donutLegendContainer');
+      
+      tableBody.innerHTML = '';
+      if(heatmapContainer) heatmapContainer.innerHTML = '';
+      if(donutLegendContainer) donutLegendContainer.innerHTML = '';
+
+      const palette = [
+        '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', 
+        '#06b6d4', '#eab308', '#a855f7', '#f43f5e', '#14b8a6', 
+        '#84cc16', '#6366f1', '#d946ef', '#f97316', '#0ea5e9'
+      ];
+
+      tossHoldings.forEach((item, idx) => {
+        const name = item.name || '알수없음';
+        const ticker = item.symbol || 'N/A';
+        const currency = item.currency || 'KRW';
+        const qty = parseFloat(item.quantity) || 0;
+        const lastPrice = parseFloat(item.lastPrice) || 0;
+        
+        const profitPctRaw = parseFloat(item.profitLoss?.rate || 0);
+        const profitPct = profitPctRaw * 100; 
+        const isUp = profitPct >= 0;
+        const profitKrw = parseFloat(item.profitLoss?.amount || 0);
+        
+        const dailyProfitRaw = parseFloat(item.dailyProfitLoss?.amount || 0);
+        const dailyProfitPct = parseFloat(item.dailyProfitLoss?.rate || 0) * 100;
+        const isDailyUp = dailyProfitRaw >= 0;
+
+        const isKrw = currency === 'KRW';
+        const currentValUsd = isKrw ? 0 : (qty * lastPrice);
+        const currentValKrw = isKrw ? (qty * lastPrice) : (currentValUsd * liveFxRate);
+        const dailyProfitKrw = isKrw ? dailyProfitRaw : (dailyProfitRaw * liveFxRate);
+        
+        totalAssetKrw += currentValKrw;
+
+        const color = palette[idx % palette.length];
+        donutLabels.push(name);
+        donutData.push(currentValKrw);
+        donutColors.push(color);
+
+        barLabels.push(name);
+        barData.push(dailyProfitKrw);
+
+        // 히트맵 가중치는 "일간손익 절대값" (영향력 큰 순서대로 그리기 위해)
+        const weight = Math.abs(dailyProfitKrw) > 0 ? Math.abs(dailyProfitKrw) : 1; 
+
+        heatmapData.push({ 
+          name, ticker, dailyProfitKrw, dailyProfitPct, isDailyUp, weight,
+          profitPct, currentValKrw, lastPrice, currency 
+        });
+
+        // 테이블 행 추가
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-[var(--sub-card-bg)] transition cursor-pointer group";
+        tr.onclick = () => openNewsPanel(ticker, name, profitPct, currentValKrw, lastPrice, currency);
+        
+        tr.innerHTML = `
+          <td class="px-3 py-2.5">
+            <div class="flex flex-col">
+              <span class="font-bold font-sans text-[11px] transition drop-shadow-sm" style="color: ${color};">${name}</span>
+              <span class="text-[9px] text-[var(--text-muted)]">${ticker}</span>
+            </div>
+          </td>
+          <td class="px-3 py-2.5 text-right font-bold text-[11px] text-[var(--text-primary)]">${qty}</td>
+          <td class="px-3 py-2.5 text-right font-bold text-[11px] text-[var(--text-primary)]">
+            ${isKrw ? '₩' : '$'} ${lastPrice.toLocaleString(undefined, {minimumFractionDigits: isKrw?0:2})}
+          </td>
+          <td class="px-3 py-2.5 text-right">
+            <div class="font-bold text-[11px] text-[var(--text-primary)]">₩ ${Math.round(currentValKrw).toLocaleString('ko-KR')}</div>
+            ${!isKrw ? `<div class="text-[9px] text-[var(--text-muted)]">$ ${currentValUsd.toLocaleString(undefined, {maximumFractionDigits:2})}</div>` : ''}
+          </td>
+          <td class="px-3 py-2.5 text-right">
+            <div class="font-bold text-[11px] ${isUp ? 'text-red-500' : 'text-blue-400'}">
+              ${isUp ? '+' : ''}₩ ${Math.round(profitKrw).toLocaleString('ko-KR')}
+            </div>
+            <div class="text-[9px] px-1 rounded inline-block mt-0.5 ${isUp ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'}">
+              ${isUp ? '+' : ''}${profitPct.toFixed(2)}%
+            </div>
+          </td>
+        `;
+        tableBody.appendChild(tr);
+
+        // 도넛 커스텀 범례 추가
+        if(donutLegendContainer) {
+           const legItem = document.createElement('div');
+           legItem.className = "flex items-center justify-between text-[10px] w-full p-1.5 rounded hover:bg-[var(--card-bg)] transition cursor-pointer border border-transparent hover:border-[var(--card-border)]";
+           legItem.onclick = () => openNewsPanel(ticker, name, profitPct, currentValKrw, lastPrice, currency);
+           legItem.innerHTML = `
+             <div class="flex items-center gap-1.5 truncate">
+               <div class="w-2.5 h-2.5 rounded-sm shrink-0 shadow-sm" style="background-color: ${color}"></div>
+               <span class="text-[var(--text-primary)] truncate font-bold">${name}</span>
+             </div>
+             <span class="font-mono text-[9px] text-[var(--text-muted)] shrink-0">${((currentValKrw / totalAssetKrw)*100).toFixed(1)}%</span>
+           `;
+           donutLegendContainer.appendChild(legItem);
+        }
+      }); 
+
+      currentTotalAssetKrw = totalAssetKrw;
+
+      // 영웅 배너 텍스트 업데이트
+      document.getElementById('totalKrwHero').innerText = `₩ ${Math.round(totalAssetKrw).toLocaleString('ko-KR')}`;
+      document.getElementById('totalUsdHero').innerText = `≈ $ ${(totalAssetKrw/liveFxRate).toLocaleString('en-US', {maximumFractionDigits:2})} USD`;
+      
+      const donutTotalText = document.getElementById('donutTotalText');
+      if(donutTotalText) donutTotalText.innerText = `₩ ${Math.round(totalAssetKrw/10000).toLocaleString('ko-KR')}만`;
+      
+      // 도넛 차트 업데이트 (가운데 텍스트 정중앙, 기본 범례 끄기)
+      if (donutChartInst) donutChartInst.destroy();
+      const ctxDonut = document.getElementById('donutChart').getContext('2d');
+      donutChartInst = new Chart(ctxDonut, {
+        type: 'doughnut',
+        data: { labels: donutLabels, datasets: [{ data: donutData, backgroundColor: donutColors, borderWidth: 0, hoverOffset: 4 }] },
+        options: {
+          cutout: '75%', responsive: true, maintainAspectRatio: false,
+          layout: { padding: 0 },
+          plugins: { 
+            legend: { display: false }, 
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  let label = context.label || '';
+                  if (label) label += ': ';
+                  if (context.parsed !== null) label += '₩ ' + Math.round(context.parsed).toLocaleString('ko-KR');
+                  return label;
+                }
+              }
+            }
+          }
+        }
+      });
+
+      // 일간 기여도 막대 차트 업데이트
+      if (barChartInst) barChartInst.destroy();
+      const ctxBar = document.getElementById('barChart').getContext('2d');
+      barChartInst = new Chart(ctxBar, {
+        type: 'bar',
+        data: {
+          labels: barLabels,
+          datasets: [{
+            label: '일간 평가손익(원)', data: barData,
+            backgroundColor: (ctx) => ctx.raw > 0 ? (isDarkTheme ? 'rgba(239, 68, 68, 0.8)' : '#dc2626') : (isDarkTheme ? 'rgba(59, 130, 246, 0.8)' : '#2563eb'),
+            borderRadius: 4
+          }]
+        },
+        options: {
+          indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { color: isDarkTheme ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }, ticks: { color: isDarkTheme ? '#94a3b8' : '#64748b', font:{size:10} } },
+            y: { grid: { display: false }, ticks: { color: isDarkTheme ? '#f8fafc' : '#0f172a', font:{size:10} } }
+          }
+        }
+      });
+
+      // 히트맵 그리기 (탭이 열려있을 때만 크기 계산 가능)
+      if(heatmapContainer && !document.getElementById('view-analysis').classList.contains('hidden')) {
+          drawHeatmapLogic(heatmapData, heatmapContainer);
+      }
+    }
+
+    // 히트맵 공간 분할 로직 
+    function drawHeatmapLogic(data, container) {
+      container.innerHTML = '';
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      if (w <= 0 || h <= 0 || data.length === 0) return;
+
+      // 가중치(일간손익 절댓값) 큰 순 정렬
+      data.sort((a, b) => b.weight - a.weight);
+      const totalWeight = data.reduce((sum, item) => sum + item.weight, 0);
+
+      function drawTreemap(dataItems, x, y, width, height, totalW) {
+        if (dataItems.length === 0 || width <= 1 || height <= 1 || totalW <= 0) return;
+        if (dataItems.length === 1) {
+          createBlock(dataItems[0], x, y, width, height);
+          return;
+        }
+
+        const isHorizontalSplit = width >= height;
+        let firstItem = dataItems[0];
+        let ratio = firstItem.weight / totalW;
+
+        if (isHorizontalSplit) {
+          let blockWidth = width * ratio;
+          createBlock(firstItem, x, y, blockWidth, height);
+          drawTreemap(dataItems.slice(1), x + blockWidth, y, width - blockWidth, height, totalW - firstItem.weight);
+        } else {
+          let blockHeight = height * ratio;
+          createBlock(firstItem, x, y, width, blockHeight);
+          drawTreemap(dataItems.slice(1), x, y + blockHeight, width, height - blockHeight, totalW - firstItem.weight);
+        }
+      }
+
+      function createBlock(item, x, y, blockW, blockH) {
+        if (blockW < 10 || blockH < 10) return;
+
+        let heatColor = 'bg-slate-700/50 border-slate-600';
+        if (item.isDailyUp && item.dailyProfitPct > 0) {
+          heatColor = item.dailyProfitPct > 2 ? 'bg-red-600/70 border-red-500/60 text-red-100' : 'bg-red-500/40 border-red-500/30 text-red-200';
+        } else if (!item.isDailyUp && item.dailyProfitPct < 0) {
+          heatColor = item.dailyProfitPct < -2 ? 'bg-blue-600/70 border-blue-500/60 text-blue-100' : 'bg-blue-500/40 border-blue-500/30 text-blue-200';
+        }
+
+        const block = document.createElement('div');
+        block.className = `absolute border ${heatColor} flex flex-col justify-center items-center cursor-pointer hover:opacity-90 hover:z-20 transition-all group overflow-hidden p-1 shadow-sm rounded-sm backdrop-blur-sm`;
+        block.style.left = `${x}px`;
+        block.style.top = `${y}px`;
+        block.style.width = `${blockW}px`;
+        block.style.height = `${blockH}px`;
+        block.onclick = () => openNewsPanel(item.ticker, item.name, item.profitPct, item.currentValKrw, item.lastPrice, item.currency);
+        
+        const showFullName = (blockW > 60 && blockH > 40);
+        const displayName = showFullName ? item.name : item.ticker;
+        const textSize = blockH < 40 ? 'text-[9px]' : (blockH < 70 ? 'text-[11px]' : 'text-xs');
+        const numSize = blockH < 40 ? 'text-[9px]' : (blockH < 70 ? 'text-xs' : 'text-sm');
+
+        block.innerHTML = `
+          <span class="font-bold ${textSize} truncate w-full text-center group-hover:whitespace-normal group-hover:bg-black/80 group-hover:text-white rounded px-1 transition-all leading-tight">${displayName}</span>
+          ${blockH > 25 ? `<span class="font-black font-mono ${numSize} mt-0.5">${item.isDailyUp && item.dailyProfitPct > 0 ? '+' : ''}${item.dailyProfitPct.toFixed(1)}%</span>` : ''}
+        `;
+        container.appendChild(block);
+      }
+
+      drawTreemap(data, 0, 0, w, h, totalWeight);
+    }
+
+    window.addEventListener('resize', () => {
+      if(tossHoldings && tossHoldings.length > 0) calculateAndRender();
+    });
+
+    // --- 슬라이드 패널 및 뉴스 로직 ---
+    function openNewsPanel(ticker, name, returnPct, valKrw, price, currency) {
+      document.getElementById('panelTicker').innerText = ticker;
+      document.getElementById('panelName').innerText = name;
+      document.getElementById('panelValue').innerText = `평가액 ₩ ${Math.round(valKrw).toLocaleString('ko-KR')}`;
+      
+      const retEl = document.getElementById('panelReturnPct');
+      retEl.innerText = `${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(2)}%`;
+      retEl.className = `font-black font-mono text-xl ${returnPct >= 0 ? 'text-red-500' : 'text-blue-400'}`;
+
+      const sym = currency === 'KRW' ? '₩' : '$';
+      document.getElementById('panelPrice').innerText = `${sym} ${price.toLocaleString(undefined, {minimumFractionDigits: currency==='USD'?2:0})}`;
+
+      document.getElementById('panelOverlay').classList.remove('hidden');
+      document.getElementById('newsSidePanel').style.transform = 'translateX(0)';
+
+      fetchStockNews(ticker, name);
+    }
+
+    function closeNewsPanel() {
+      document.getElementById('panelOverlay').classList.add('hidden');
+      document.getElementById('newsSidePanel').style.transform = 'translateX(100%)';
+    }
+
+    async function fetchStockNews(ticker, name) {
+      const loadingEl = document.getElementById('newsLoading');
+      const contentEl = document.getElementById('newsContent');
+
+      // 기존 하드코딩된 스타일을 제거하고 3개의 카드를 담을 수 있게 클래스 초기화
+      contentEl.className = "space-y-3";
+      contentEl.classList.add('hidden');
+      loadingEl.classList.remove('hidden');
+
+      // 🚨 여기에 발급받으신 진짜 API KEY를 입력하세요!
+      const NEWS_API_KEY = 'ddfdb453dd5441f79bef4d7267338c4b';
+      
+      // 검색어: 종목명 또는 티커 (한국어 뉴스 위주로 검색)
+      const query = encodeURIComponent(`${name} OR ${ticker}`);
+
+      try {
+        // News API의 3가지 정렬 기준(최신, 인기, 관련도)을 활용해 동시에 3번 호출합니다.
+        const reqLatest = fetch(`https://newsapi.org/v2/everything?q=${query}&sortBy=publishedAt&language=ko&pageSize=1&apiKey=${NEWS_API_KEY}`);
+        const reqPopular = fetch(`https://newsapi.org/v2/everything?q=${query}&sortBy=popularity&language=ko&pageSize=1&apiKey=${NEWS_API_KEY}`);
+        const reqRelevant = fetch(`https://newsapi.org/v2/everything?q=${query}&sortBy=relevancy&language=ko&pageSize=1&apiKey=${NEWS_API_KEY}`);
+
+        // 3개의 요청을 병렬(동시)로 처리하여 로딩 속도를 높입니다.
+        const [resLatest, resPopular, resRelevant] = await Promise.all([reqLatest, reqPopular, reqRelevant]);
+
+        const dataLatest = await resLatest.json();
+        const dataPopular = await resPopular.json();
+        const dataRelevant = await resRelevant.json();
+
+        // 3가지 데이터를 보기 좋게 배열로 묶기
+        const articles = [
+          { label: '⏰ 가장 최신 뉴스', color: 'bg-blue-500', data: dataLatest.articles?.[0] },
+          { label: '🔥 화제의 인기 뉴스 (조회수/트래픽)', color: 'bg-red-500', data: dataPopular.articles?.[0] },
+          { label: '⭐️ 관련도 높은 뉴스 (정확도/추천)', color: 'bg-amber-500', data: dataRelevant.articles?.[0] }
+        ];
+
+        let htmlString = '';
+        const seenUrls = new Set(); // 최신 뉴스와 인기 뉴스가 똑같은 기사일 경우 중복 방지용
+
+        articles.forEach(item => {
+          if (item.data && !seenUrls.has(item.data.url)) {
+            seenUrls.add(item.data.url);
+            
+            const title = item.data.title || '제목 없음';
+            const summary = item.data.description ? item.data.description.substring(0, 65) + '...' : '본문 요약이 제공되지 않는 기사입니다.';
+            const url = item.data.url;
+            const source = item.data.source?.name || '알 수 없는 출처';
+
+            // HTML 카드 디자인 조립
+            htmlString += `
+              <div class="bg-[var(--sub-card-bg)] p-3 rounded-lg border border-[var(--card-border)] relative overflow-hidden group hover:border-[var(--accent)] transition">
+                <div class="absolute left-0 top-0 w-1 h-full ${item.color}"></div>
+                <div class="text-[10px] font-bold text-[var(--text-muted)] mb-1">${item.label}</div>
+                <a href="${url}" target="_blank" class="block" title="원문 기사 보러가기">
+                  <div class="text-xs font-bold text-[var(--text-primary)] leading-tight group-hover:text-emerald-400 transition mb-1">${title}</div>
+                  <p class="text-[11px] text-[var(--text-secondary)] leading-relaxed">${summary}</p>
+                </a>
+                <div class="text-[9px] text-[var(--text-muted)] mt-1.5 text-right">출처: ${source}</div>
+              </div>
+            `;
+          }
+        });
+
+        // 만약 3개 모두 검색 결과가 없다면
+        if (htmlString === '') {
+          htmlString = '<div class="text-xs text-[var(--text-muted)] text-center py-4 bg-[var(--sub-card-bg)] rounded border border-[var(--card-border)]">관련 한국어 뉴스를 찾을 수 없습니다.</div>';
+        }
+
+        contentEl.innerHTML = htmlString;
+        loadingEl.classList.add('hidden');
+        contentEl.classList.remove('hidden');
+
+      } catch (err) {
+        console.error("뉴스 로딩 실패:", err);
+        loadingEl.classList.add('hidden');
+        contentEl.innerHTML = '<div class="text-xs font-bold text-red-400 text-center py-4 bg-[var(--sub-card-bg)] rounded border border-[var(--card-border)]">API 한도 초과 또는 네트워크 오류가 발생했습니다.</div>';
+        contentEl.classList.remove('hidden');
+      }
+    }
+
+    // --- 자산 추이(History) 기간/필터/저장 로직 ---
+    function setHistoryPeriod(period) {
+      currentHistoryPeriod = period;
+      ['daily', 'monthly', 'yearly'].forEach(p => {
+        const btn = document.getElementById(`btn-period-${p}`);
+        if (!btn) return;
+        if (p === period) {
+          btn.className = "px-4 py-1.5 rounded bg-[var(--card-bg)] text-emerald-400 shadow-sm transition touch-pop font-bold";
+        } else {
+          btn.className = "px-4 py-1.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] transition touch-pop font-bold";
+        }
+      });
+      renderHistoryChart();
+    }
+
+    function applyDateFilter() {
+      const startInput = document.getElementById('historyStartDate').value;
+      const endInput = document.getElementById('historyEndDate').value;
+      filterStartDate = startInput ? startInput : null;
+      filterEndDate = endInput ? endInput : null;
+      renderHistoryChart();
+      showToast('조회 기간이 변경되었습니다.');
+    }
+
+    function processChartData() {
+      if(rawHistoryData.length === 0) return [];
+      
+      const grouped = {};
+      rawHistoryData.forEach(item => {
+        // 1. 기간 자르기
+        if (filterStartDate && item.date < filterStartDate) return;
+        if (filterEndDate && item.date > filterEndDate) return;
+
+        // 2. 단위 묶기 (월말/연말 덮어쓰기)
+        let key = item.date; 
+        if (currentHistoryPeriod === 'monthly') key = item.date.substring(0, 7); 
+        if (currentHistoryPeriod === 'yearly') key = item.date.substring(0, 4);  
+        grouped[key] = item; 
+      });
+      return Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date));
+    }
+
+    async function loadHistoryData() {
+      try {
+        const response = await fetch('/api/history');
+        const result = await response.json();
+        if (result.success && result.data) {
+          rawHistoryData = result.data;
+          renderHistoryChart();
+          showToast('최신 기록을 불러왔습니다.');
+        } else {
+          throw new Error();
+        }
+      } catch (e) {
+        // 통신 실패 시 약 1년치 가상 데이터 생성
+        rawHistoryData = [];
+        let base = 85000000;
+        for (let i = 400; i >= 0; i--) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          rawHistoryData.push({ date: d.toISOString().split('T')[0], totalKrw: base });
+          base = base * (1 + (Math.random() * 0.03 - 0.014)); 
+        }
+        renderHistoryChart();
+        showToast('가상 과거 데이터가 생성되었습니다.');
+      }
+    }
+
+    async function saveCurrentRecord() {
+      if (currentTotalAssetKrw <= 0) {
+        showToast('저장할 자산이 없습니다. 먼저 토스 API를 동기화해주세요.');
+        return;
+      }
+      
+      const today = new Date().toISOString().split('T')[0];
+      const payload = { date: today, totalKrw: currentTotalAssetKrw };
+      
+      try {
+        const res = await fetch('/api/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        if(result.success) {
+          showToast('오늘의 스냅샷이 기록되었습니다!');
+          loadHistoryData(); 
+        } else {
+          throw new Error(result.message);
+        }
+      } catch(e) {
+        // 서버 연결 없이 로컬에서 테스트할 때를 위한 가상 저장 기능
+        const existingIdx = rawHistoryData.findIndex(d => d.date === today);
+        if(existingIdx >= 0) rawHistoryData[existingIdx].totalKrw = currentTotalAssetKrw;
+        else rawHistoryData.push(payload);
+        
+        rawHistoryData.sort((a, b) => a.date.localeCompare(b.date));
+        renderHistoryChart();
+        showToast('[가상 모드] 오늘 기록이 업데이트 되었습니다.');
+      }
+    }
+
+    function renderHistoryChart() {
+      if (historyChartInst) historyChartInst.destroy();
+      
+      const processedData = processChartData();
+      if(processedData.length === 0) return;
+
+      const labels = processedData.map(d => {
+        if (currentHistoryPeriod === 'daily') return d.date.substring(5); 
+        if (currentHistoryPeriod === 'monthly') return d.date.substring(2, 7); 
+        return d.date.substring(0, 4); 
+      });
+      
+      const dataPoints = processedData.map(d => Math.round(d.totalKrw / 10000)); 
+
+      const lineColor = isDarkTheme ? '#10b981' : '#2563eb';
+      const bgColor = isDarkTheme ? 'rgba(16, 185, 129, 0.15)' : 'rgba(37, 99, 235, 0.15)';
+      const gridColor = isDarkTheme ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
+      const tickColor = isDarkTheme ? '#94a3b8' : '#64748b';
+
+      const ctx = document.getElementById('historyChart').getContext('2d');
+      historyChartInst = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: '총자산(만원)',
+            data: dataPoints,
+            borderColor: lineColor,
+            backgroundColor: bgColor,
+            fill: true,
+            tension: 0.3,
+            pointBackgroundColor: lineColor,
+            pointBorderColor: isDarkTheme ? '#111827' : '#ffffff',
+            pointRadius: currentHistoryPeriod === 'daily' ? 0 : 4,
+            pointHoverRadius: 6,
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false }, 
+          plugins: { 
+            legend: { display: false },
+            tooltip: { callbacks: { label: (ctx) => ' ₩ ' + Math.round(ctx.raw).toLocaleString('ko-KR') + ' 만원' } }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: tickColor, font: {family: 'JetBrains Mono', size: 10}, maxTicksLimit: 12 } },
+            y: { grid: { color: gridColor }, ticks: { color: tickColor, font: {family: 'JetBrains Mono', size: 10} } }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>  
