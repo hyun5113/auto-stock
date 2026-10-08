@@ -306,6 +306,8 @@
   </div>
 
   <script>
+    const API_BASE_URL = 'https://assetpulse-backend.onrender.com';
+    
     let isDarkTheme = true;
     let donutChartInst = null;
     let barChartInst = null;
@@ -397,7 +399,7 @@
       msg.classList.add('hidden');
 
       try {
-        const response = await fetch('/api/sync-toss');
+        const response = await fetch('${API_BASE_URL}/api/sync-toss');
         const result = await response.json();
 
         if (result.success && result.data) {
@@ -710,7 +712,7 @@
       loadingEl.classList.remove('hidden');
 
       // 🚨 여기에 발급받으신 진짜 API KEY를 입력하세요!
-      const NEWS_API_KEY = '여기에_발급받은_API_KEY를_입력하세요';
+      const NEWS_API_KEY = 'ddfdb453dd5441f79bef4d7267338c4b';
       
       // 검색어: 종목명 또는 티커 (한국어 뉴스 위주로 검색)
       const query = encodeURIComponent(`${name} OR ${ticker}`);
@@ -823,7 +825,7 @@
 
     async function loadHistoryData() {
       try {
-        const response = await fetch('/api/history');
+        const response = await fetch('${API_BASE_URL}/api/history');
         const result = await response.json();
         if (result.success && result.data) {
           rawHistoryData = result.data;
@@ -857,7 +859,7 @@
       const payload = { date: today, totalKrw: currentTotalAssetKrw };
       
       try {
-        const res = await fetch('/api/history', {
+        const res = await fetch('${API_BASE_URL}/api/history', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
